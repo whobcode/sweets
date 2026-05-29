@@ -8,18 +8,13 @@ compatibility_flags = ["nodejs_compat"]
 route = "https://netmcp-api.yourdomain.com/*"
 zone_id = "your-zone-id"
 account_id = "your-account-id"
+vars = { NETMCP_URL = "https://netmcp.hwmnbn.me/mcp" }
 
 [env.staging]
 route = "https://netmcp-staging.yourdomain.com/*"
 zone_id = "your-zone-id"
 account_id = "your-account-id"
-
-# Optional: Add environment variables
-[env.production]
 vars = { NETMCP_URL = "https://netmcp.hwmnbn.me/mcp" }
-
-[env.staging]
-vars = { NETMCP_URL = "https://tru-bone.workers.dev/mcp" }
 
 # Optional: Add secrets (for authentication)
 # Run: wrangler secret put NETMCP_TOKEN --env production
