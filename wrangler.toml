@@ -1,0 +1,72 @@
+name = "netmcp-api"
+main = "src/index.js"
+compatibility_date = "2024-09-30"
+compatibility_flags = ["nodejs_compat"]
+
+# Environment-specific configuration
+[env.production]
+route = "https://netmcp-api.yourdomain.com/*"
+zone_id = "your-zone-id"
+account_id = "your-account-id"
+
+[env.staging]
+route = "https://netmcp-staging.yourdomain.com/*"
+zone_id = "your-zone-id"
+account_id = "your-account-id"
+
+# Optional: Add environment variables
+[env.production]
+vars = { NETMCP_URL = "https://netmcp.hwmnbn.me/mcp" }
+
+[env.staging]
+vars = { NETMCP_URL = "https://tru-bone.workers.dev/mcp" }
+
+# Optional: Add secrets (for authentication)
+# Run: wrangler secret put NETMCP_TOKEN --env production
+# Then uncomment below:
+# [env.production]
+# [env.production.vars_and_secrets]
+# secrets = ["NETMCP_TOKEN"]
+
+# Optional: Add KV namespace for caching
+# [env.production.kv_namespaces]
+# KV_CACHE = "netmcp-cache-prod"
+
+# Optional: Add Durable Objects
+# [env.production]
+# durable_objects.bindings = [
+#   { name = "STATE", class_name = "RequestState" }
+# ]
+
+# Optional: Add D1 database
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "netmcp-db"
+# database_id = "your-db-id"
+
+# Limits
+limits = { cpu_milliseconds = 50000 }
+
+# Build configuration
+[build]
+command = "npm install"
+cwd = "./"
+watch_paths = ["src/**/*.js"]
+
+# Build watch paths (auto-reload)
+[build.upload]
+format = "service-worker"
+
+# Routes (if using with Cloudflare Pages)
+# [[routes]]
+# pattern = "example.com/api/*"
+# zone_id = "your-zone-id"
+# custom_domain = true
+
+# Optional: Triggers for scheduled tasks
+# [triggers.crons]
+# crons = ["0 0 * * *"]  # Daily at midnight
+
+# Optional: Analytics Engine
+# [[analytics_engine_datasets]]
+# binding = "ANALYTICS"

@@ -1,0 +1,50 @@
+{
+  "name": "netmcp-shortcuts",
+  "version": "1.0.0",
+  "description": "Complete toolkit for netmcp shortcuts across CLI, Cloudflare Workers, browser, and iOS",
+  "type": "module",
+  "main": "netmcp-cli.js",
+  "bin": {
+    "netmcp": "netmcp-cli.js"
+  },
+  "scripts": {
+    "cli": "node netmcp-cli.js",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "worker:logs": "wrangler tail",
+    "test": "node test-netmcp.js",
+    "start": "npm run cli"
+  },
+  "keywords": [
+    "netmcp",
+    "mcp",
+    "cloudflare",
+    "workers",
+    "shortcuts",
+    "cli",
+    "osint",
+    "security"
+  ],
+  "author": "ahunnidKage",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0"
+  },
+  "optionalDependencies": {
+    "@cloudflare/workers-types": "^4.20240820.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/whobcode/netmcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/whobcode/netmcp/issues"
+  },
+  "homepage": "https://github.com/whobcode/netmcp"
+}
