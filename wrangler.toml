@@ -3,6 +3,20 @@ main = "src/index.js"
 compatibility_date = "2024-09-30"
 compatibility_flags = ["nodejs_compat"]
 
+# netmcp upstream + OAuth client (public client, PKCE)
+[vars]
+NETMCP_URL = "https://netmcp.hwmnbn.me/mcp"
+NETMCP_TOKEN_URL = "https://netmcp.hwmnbn.me/token"
+NETMCP_CLIENT_ID = "eWefWVrcVNgw04i0"
+# Effective access-token lifetime in seconds. The server advertises 3600 but
+# tokens were observed dying in ~1-2 min, so we cap low and refresh often.
+NETMCP_TOKEN_TTL = "60"
+
+# KV: stores the rotating refresh token + cached access token
+[[kv_namespaces]]
+binding = "NETMCP_AUTH"
+id = "adb42c556a104d49b5d6861dc823732d"
+
 # Environment-specific configuration
 [env.production]
 route = "https://netmcp-api.yourdomain.com/*"
@@ -46,11 +60,6 @@ limits = { cpu_milliseconds = 50000 }
 [build]
 command = "npm install"
 cwd = "./"
-watch_paths = ["src/**/*.js"]
-
-# Build watch paths (auto-reload)
-[build.upload]
-format = "service-worker"
 
 # Routes (if using with Cloudflare Pages)
 # [[routes]]

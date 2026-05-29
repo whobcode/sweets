@@ -6,6 +6,8 @@
  * Usage: https://your-worker.workers.dev/tool/screenshot?url=https://example.com
  */
 
+import { getAccessToken, authStatus } from "./auth.js";
+
 const NETMCP_URL = "https://netmcp.hwmnbn.me/mcp";
 
 // CORS headers
@@ -25,9 +27,15 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    // Route: /auth/status — confirms the KV-backed token layer can mint a token
+    if (path === "/auth/status") {
+      const status = await authStatus(env);
+      return jsonResponse(status, status.ok ? 200 : 503);
+    }
+
     // Route: /tool/:toolName or /tool/:toolName?params
     if (path.startsWith("/tool/")) {
-      return handleToolCall(request, url);
+      return handleToolCall(request, url, env);
     }
 
     // Route: /tools (list available tools)
@@ -47,7 +55,7 @@ export default {
   },
 };
 
-async function handleToolCall(request, url) {
+async function handleToolCall(request, url, env) {
   const pathParts = url.pathname.split("/");
   const toolName = pathParts[2];
 
@@ -69,6 +77,9 @@ async function handleToolCall(request, url) {
       params = body;
     }
 
+    // KV-backed OAuth: always attach a fresh Bearer token to the upstream call.
+    const accessToken = await getAccessToken(env);
+
     const payload = {
       jsonrpc: "2.0",
       id: "1",
@@ -79,9 +90,18 @@ async function handleToolCall(request, url) {
       },
     };
 
+    // NOTE: netmcp is a streamable-HTTP MCP server. A working tool call also
+    // requires an `initialize` handshake (to obtain an Mcp-Session-Id), the
+    // `Accept: application/json, text/event-stream` header, SSE response
+    // parsing, and the server's real tool names. That protocol rewrite is the
+    // deferred next step; this layer's job is supplying a valid access token.
     const response = await fetch(NETMCP_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+        "Authorization": `Bearer ${accessToken}`,
+      },
       body: JSON.stringify(payload),
     });
 
