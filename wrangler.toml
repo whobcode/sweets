@@ -17,6 +17,12 @@ NETMCP_TOKEN_TTL = "60"
 binding = "NETMCP_AUTH"
 id = "adb42c556a104d49b5d6861dc823732d"
 
+# Custom domain — serves the Worker at https://netapi.hwmnbn.me
+# (requires the hwmnbn.me zone to be in this Cloudflare account)
+[[routes]]
+pattern = "netapi.hwmnbn.me"
+custom_domain = true
+
 # Environment-specific configuration
 [env.production]
 route = "https://netmcp-api.yourdomain.com/*"

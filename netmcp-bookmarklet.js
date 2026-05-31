@@ -1,218 +1,136 @@
 /**
  * netmcp Browser Bookmarklet
- * 
+ *
+ * Calls the netmcp Worker (https://netapi.hwmnbn.me), which handles OAuth and
+ * the MCP protocol — the raw netmcp endpoint can't be called from the browser.
+ *
  * Installation:
- * 1. Create a new bookmark in your browser
- * 2. Title: "netmcp Tools"
- * 3. Paste the entire code block below as the URL
- * 
- * Usage: Click the bookmark from any page
+ *   1. Create a new bookmark in your browser
+ *   2. Title: "netmcp Tools"
+ *   3. Paste the entire javascript: line below as the URL
  */
 
 javascript:(function() {
-  const NETMCP_URL = 'https://netmcp.hwmnbn.me/mcp';
-  const currentUrl = window.location.href;
-  const currentTitle = document.title;
+  const API = 'https://netapi.hwmnbn.me';
+  const here = window.location.href;
 
-  // Tool categories
+  // [tool, label, {param: defaultValue}] — empty default means "prompt me".
   const tools = {
-    'Browser Tools': {
-      'Screenshot': { tool: 'screenshot', params: { url: currentUrl } },
-      'Get Content': { tool: 'get_content', params: { url: currentUrl } },
-      'Get Markdown': { tool: 'get_markdown', params: { url: currentUrl } },
-      'Click Element': { tool: 'click', params: { url: currentUrl, selector: '' } },
-      'Fill Form': { tool: 'fill_form', params: { url: currentUrl, data: '{}' } }
-    },
-    'OSINT': {
-      'Shodan Search': { tool: 'shodan_search', params: { query: '' } },
-      'IP Lookup': { tool: 'ipwhois_lookup', params: { ip: '' } },
-      'Censys Search': { tool: 'censys_search', params: { query: '' } },
-      'DNS History': { tool: 'securitytrails_dns', params: { domain: '' } }
-    },
-    'GitHub': {
-      'Search Repos': { tool: 'github_search', params: { query: '' } },
-      'Search Exploits': { tool: 'github_exploit_search', params: { query: '' } }
-    },
-    'Security': {
-      'CVE Lookup': { tool: 'nvd_lookup', params: { cve: '' } },
-      'ExploitDB Search': { tool: 'exploitdb_search', params: { query: '' } },
-      'Vulnerability Scan': { tool: 'osv_scan', params: { package: '' } }
-    },
-    'Image': {
-      'Generate Image': { tool: 'generate_image', params: { prompt: '' } }
-    }
+    'Browser': [
+      ['browser_screenshot', 'Screenshot', { url: here }],
+      ['browser_get_content', 'Get Content', { url: here }],
+      ['browser_get_markdown', 'Get Markdown', { url: here }],
+      ['browser_get_links', 'Get Links', { url: here }],
+      ['browser_click', 'Click Element', { url: here, selector: '' }],
+    ],
+    'OSINT': [
+      ['shodan_device_search', 'Shodan Search', { query: '' }],
+      ['censys_host_search', 'Censys Search', { query: '' }],
+      ['ipwhois_enrichment', 'IP Lookup', { ip: '' }],
+      ['securitytrails_dns_history', 'DNS History', { domain: '' }],
+      ['wayback_machine_lookup', 'Wayback', { url: here }],
+    ],
+    'Code / Exploits': [
+      ['github_exploit_search', 'GitHub Exploits', { query: '' }],
+      ['gitlab_code_search', 'GitLab Code', { query: '' }],
+      ['exploitdb_search', 'ExploitDB', { query: '' }],
+    ],
+    'CVE': [
+      ['nvd_cve_lookup', 'CVE Lookup', { cveId: '' }],
+      ['osv_vulnerability_scan', 'Vuln Scan', { packageName: '', ecosystem: '' }],
+    ],
+    'AI': [
+      ['generateImage', 'Generate Image', { prompt: '' }],
+    ],
   };
 
-  // Create modal UI
+  const overlayCss = 'position:fixed;inset:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:2147483647;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif';
+  const cardCss = 'background:#1e1e1e;color:#d4d4d4;padding:20px;border-radius:8px;max-width:520px;max-height:82vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5)';
+
   const modal = document.createElement('div');
-  modal.id = 'netmcp-modal';
-  modal.style.cssText = `
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.7);
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  `;
+  modal.style.cssText = overlayCss;
+  const card = document.createElement('div');
+  card.style.cssText = cardCss;
 
-  const container = document.createElement('div');
-  container.style.cssText = `
-    background: #1e1e1e;
-    color: #d4d4d4;
-    padding: 20px;
-    border-radius: 8px;
-    max-width: 500px;
-    max-height: 80vh;
-    overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-  `;
+  const h = document.createElement('h2');
+  h.textContent = '🔧 netmcp Tools';
+  h.style.cssText = 'margin:0 0 16px;color:#0e7;font-size:20px';
+  card.appendChild(h);
 
-  // Header
-  const header = document.createElement('h2');
-  header.textContent = '🔧 netmcp Tools';
-  header.style.cssText = `
-    margin: 0 0 20px 0;
-    color: #0e7;
-    font-size: 20px;
-  `;
-  container.appendChild(header);
+  Object.entries(tools).forEach(([cat, list]) => {
+    const ct = document.createElement('h3');
+    ct.textContent = cat;
+    ct.style.cssText = 'color:#4ec9b0;font-size:13px;margin:14px 0 6px;text-transform:uppercase';
+    card.appendChild(ct);
 
-  // Category sections
-  Object.entries(tools).forEach(([category, toolList]) => {
-    const categoryTitle = document.createElement('h3');
-    categoryTitle.textContent = category;
-    categoryTitle.style.cssText = `
-      color: #4ec9b0;
-      font-size: 14px;
-      margin: 15px 0 8px 0;
-      text-transform: uppercase;
-    `;
-    container.appendChild(categoryTitle);
-
-    Object.entries(toolList).forEach(([name, { tool, params }]) => {
-      const button = document.createElement('button');
-      button.textContent = name;
-      button.style.cssText = `
-        display: block;
-        width: 100%;
-        padding: 10px;
-        margin: 5px 0;
-        background: #2d2d2d;
-        color: #d4d4d4;
-        border: 1px solid #404040;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 13px;
-        transition: all 0.2s;
-      `;
-      button.onmouseover = () => {
-        button.style.background = '#383838';
-        button.style.borderColor = '#0e7';
-      };
-      button.onmouseout = () => {
-        button.style.background = '#2d2d2d';
-        button.style.borderColor = '#404040';
-      };
-      button.onclick = () => executeTool(tool, params, name);
-      container.appendChild(button);
+    list.forEach(([tool, label, params]) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.style.cssText = 'display:block;width:100%;padding:10px;margin:4px 0;background:#2d2d2d;color:#d4d4d4;border:1px solid #404040;border-radius:4px;cursor:pointer;font-size:13px';
+      b.onmouseover = () => { b.style.background = '#383838'; b.style.borderColor = '#0e7'; };
+      b.onmouseout = () => { b.style.background = '#2d2d2d'; b.style.borderColor = '#404040'; };
+      b.onclick = () => run(tool, Object.assign({}, params), label);
+      card.appendChild(b);
     });
   });
 
-  // Close button
-  const closeBtn = document.createElement('button');
-  closeBtn.textContent = '✕ Close';
-  closeBtn.style.cssText = `
-    width: 100%;
-    padding: 10px;
-    margin-top: 15px;
-    background: #404040;
-    color: #d4d4d4;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-  `;
-  closeBtn.onclick = () => modal.remove();
-  container.appendChild(closeBtn);
+  const close = document.createElement('button');
+  close.textContent = '✕ Close';
+  close.style.cssText = 'width:100%;padding:10px;margin-top:14px;background:#404040;color:#d4d4d4;border:none;border-radius:4px;cursor:pointer;font-size:13px';
+  close.onclick = () => modal.remove();
+  card.appendChild(close);
 
-  modal.appendChild(container);
+  modal.appendChild(card);
   document.body.appendChild(modal);
 
-  // Close on ESC
-  const closeOnEsc = (e) => {
-    if (e.key === 'Escape') {
-      modal.remove();
-      document.removeEventListener('keydown', closeOnEsc);
-    }
-  };
-  document.addEventListener('keydown', closeOnEsc);
+  const onEsc = (e) => { if (e.key === 'Escape') { modal.remove(); document.removeEventListener('keydown', onEsc); } };
+  document.addEventListener('keydown', onEsc);
 
-  async function executeTool(toolName, params, displayName) {
-    // Prompt for any empty params
-    for (const [key, value] of Object.entries(params)) {
-      if (!value) {
-        const input = prompt(`Enter ${key} for ${displayName}:`);
+  async function run(tool, params, label) {
+    for (const [k, v] of Object.entries(params)) {
+      if (v === '') {
+        const input = prompt('Enter ' + k + ' for ' + label + ':');
         if (input === null) return;
-        params[key] = input;
+        params[k] = input;
       }
     }
 
-    const payload = {
-      jsonrpc: '2.0',
-      id: '1',
-      method: 'tools/call',
-      params: { name: toolName, arguments: params }
-    };
+    const result = document.createElement('pre');
+    result.style.cssText = 'background:#0d0d0d;padding:10px;border-radius:4px;font-size:11px;overflow:auto;color:#0e7;max-height:55vh;white-space:pre-wrap;word-break:break-word';
+    result.textContent = '⏳ Calling ' + tool + ' ...';
+
+    const rcard = document.createElement('div');
+    rcard.style.cssText = cardCss;
+    rcard.style.maxWidth = '820px';
+    const rt = document.createElement('h3');
+    rt.textContent = label;
+    rt.style.color = '#0e7';
+    rcard.appendChild(rt);
+    rcard.appendChild(result);
+    const back = document.createElement('button');
+    back.textContent = '← Back';
+    back.style.cssText = close.style.cssText;
+    back.onclick = () => { rmodal.remove(); document.body.appendChild(modal); };
+    rcard.appendChild(back);
+    const rmodal = document.createElement('div');
+    rmodal.style.cssText = overlayCss;
+    rmodal.appendChild(rcard);
+    modal.remove();
+    document.body.appendChild(rmodal);
 
     try {
-      const response = await fetch(NETMCP_URL, {
+      const res = await fetch(API + '/tool/' + encodeURIComponent(tool), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(params),
       });
-      const data = await response.json();
-
-      if (data.error) {
-        alert('Error: ' + data.error.message);
-      } else {
-        // Display result
-        const resultModal = document.createElement('div');
-        resultModal.style.cssText = modal.style.cssText;
-        const resultContainer = document.createElement('div');
-        resultContainer.style.cssText = container.style.cssText;
-        resultContainer.style.maxWidth = '800px';
-        
-        const title = document.createElement('h3');
-        title.textContent = '✓ ' + displayName;
-        title.style.color = '#0e7';
-        resultContainer.appendChild(title);
-
-        const result = document.createElement('pre');
-        result.style.cssText = `
-          background: #0d0d0d;
-          padding: 10px;
-          border-radius: 4px;
-          font-size: 11px;
-          overflow-x: auto;
-          color: #0e7;
-          max-height: 50vh;
-        `;
-        result.textContent = JSON.stringify(data.result, null, 2);
-        resultContainer.appendChild(result);
-
-        const backBtn = document.createElement('button');
-        backBtn.textContent = '← Back';
-        backBtn.style.cssText = closeBtn.style.cssText;
-        backBtn.onclick = () => resultModal.remove();
-        resultContainer.appendChild(backBtn);
-
-        resultModal.appendChild(resultContainer);
-        modal.parentNode.replaceChild(resultModal, modal);
-      }
-    } catch (error) {
-      alert('Failed to execute tool: ' + error.message);
+      const data = await res.json();
+      const r = data.result || data;
+      const texts = (r.content || []).filter((c) => c.type === 'text').map((c) => c.text);
+      const prefix = r.isError ? '⚠️ Tool error:\n\n' : '';
+      result.textContent = prefix + (texts.length ? texts.join('\n') : JSON.stringify(data, null, 2));
+    } catch (e) {
+      result.textContent = '❌ ' + e.message;
     }
   }
 })();

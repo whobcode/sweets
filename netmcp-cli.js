@@ -1,196 +1,170 @@
 #!/usr/bin/env node
 
-import fetch from "node-fetch";
+/**
+ * netmcp CLI
+ *
+ * Talks to the netmcp Worker (which handles OAuth + the MCP protocol), NOT the
+ * raw netmcp endpoint — that one requires GitHub OAuth and the streamable-HTTP
+ * MCP handshake, which a thin client can't do. The Worker exposes each tool at
+ * GET/POST /tool/:name and returns plain JSON.
+ *
+ *   node netmcp-cli.js                      # interactive menu
+ *   node netmcp-cli.js <tool> '{"k":"v"}'   # one-shot call
+ *   NETMCP_API=https://host node netmcp-cli.js
+ */
+
 import readline from "readline";
 
-const NETMCP_URL = "https://netmcp.hwmnbn.me/mcp";
-const FALLBACK_URL = "https://tru-bone.workers.dev/mcp";
+const API = (process.env.NETMCP_API || "https://netapi.hwmnbn.me").replace(/\/$/, "");
 
-// Available tools organized by category
+// Real server tools grouped for the menu, with their parameters.
+// (* marks required — keep in sync with the Worker's TOOL_SCHEMA.)
 const TOOLS = {
-  browser: {
-    screenshot: { desc: "Take screenshot of webpage", params: ["url"] },
-    get_content: {
-      desc: "Extract text from webpage",
-      params: ["url"],
-    },
-    click: {
-      desc: "Click element on page",
-      params: ["url", "selector"],
-    },
-    fill_form: {
-      desc: "Fill out form on page",
-      params: ["url", "data"],
-    },
-    get_markdown: {
-      desc: "Fetch page as markdown",
-      params: ["url"],
-    },
+  "Security / CVE": {
+    nvd_cve_lookup: { desc: "Look up CVEs in the NVD", params: ["cveId", "keyword"] },
+    osv_vulnerability_scan: { desc: "Scan a package for vulns", params: ["packageName*", "ecosystem*", "version"] },
+    exploitdb_search: { desc: "Search ExploitDB", params: ["query", "platform", "type"] },
+    exploitdb_get: { desc: "Fetch an ExploitDB entry by id", params: ["id*"] },
+    exploitdb_info: { desc: "ExploitDB metadata", params: [] },
   },
-  osint: {
-    shodan_search: {
-      desc: "Search Shodan for devices",
-      params: ["query"],
-    },
-    censys_search: {
-      desc: "Search Censys hosts",
-      params: ["query"],
-    },
-    securitytrails_dns: {
-      desc: "Query DNS history",
-      params: ["domain"],
-    },
-    ipwhois_lookup: {
-      desc: "Get IP geolocation/WHOIS",
-      params: ["ip"],
-    },
+  OSINT: {
+    github_exploit_search: { desc: "Search GitHub for exploits", params: ["query*", "language", "limit"] },
+    gitlab_code_search: { desc: "Search GitLab code", params: ["query*", "scope", "limit"] },
+    shodan_device_search: { desc: "Search Shodan devices", params: ["query*", "facets", "limit"] },
+    censys_host_search: { desc: "Search Censys hosts", params: ["query*", "perPage"] },
+    securitytrails_dns_history: { desc: "Historical DNS", params: ["domain*", "type"] },
+    ipwhois_enrichment: { desc: "IP geolocation / WHOIS", params: ["ip*"] },
+    wayback_machine_lookup: { desc: "Wayback Machine snapshots", params: ["url*", "timestamp", "limit"] },
   },
-  github: {
-    github_search: {
-      desc: "Search GitHub repositories",
-      params: ["query"],
-    },
-    github_exploit_search: {
-      desc: "Search GitHub for exploits",
-      params: ["query"],
-    },
+  Browser: {
+    browser_screenshot: { desc: "Screenshot a page", params: ["url*", "fullPage"] },
+    browser_get_content: { desc: "Extract page text", params: ["url*", "selector"] },
+    browser_get_markdown: { desc: "Page as markdown", params: ["url*"] },
+    browser_pdf: { desc: "Render page to PDF", params: ["url*"] },
+    browser_scrape: { desc: "Scrape via selectors", params: ["url*", "selectors*"] },
+    browser_execute_script: { desc: "Run JS on a page", params: ["url*", "script*"] },
+    browser_get_links: { desc: "Extract links", params: ["url*"] },
+    browser_fill_form: { desc: "Fill a form", params: ["url*", "fields*"] },
+    browser_click: { desc: "Click an element", params: ["url*", "selector*"] },
   },
-  security: {
-    nvd_lookup: {
-      desc: "Search NVD for CVE",
-      params: ["cve"],
-    },
-    exploitdb_search: {
-      desc: "Search ExploitDB",
-      params: ["query"],
-    },
-    osv_scan: {
-      desc: "Scan package for vulnerabilities",
-      params: ["package"],
-    },
-  },
-  image: {
-    generate_image: {
-      desc: "Generate image with AI",
-      params: ["prompt"],
-    },
+  Misc: {
+    add: { desc: "Add two numbers", params: ["a*", "b*"] },
+    userInfoOctokit: { desc: "Authenticated GitHub user info", params: [] },
+    generateImage: { desc: "Generate an image with AI", params: ["prompt*", "steps"] },
   },
 };
 
-// Interactive CLI
-async function main() {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+const ALL = Object.assign({}, ...Object.values(TOOLS));
+
+async function callTool(name, args) {
+  const res = await fetch(`${API}/tool/${encodeURIComponent(name)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(args),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+/** Pretty-print an MCP tool result: text content first, then the raw object. */
+function printResult(data) {
+  const result = data.result || data;
+  const texts = (result.content || [])
+    .filter((c) => c.type === "text")
+    .map((c) => c.text);
+  if (result.isError) console.log("\n⚠️  Tool reported an error:");
+  if (texts.length) {
+    console.log("\n" + texts.join("\n"));
+  } else {
+    console.log("\n" + JSON.stringify(result, null, 2));
+  }
+}
+
+async function oneShot(name, jsonArgs) {
+  if (!(name in ALL)) {
+    console.error(`Unknown tool '${name}'. Available:\n  ${Object.keys(ALL).join("\n  ")}`);
+    process.exit(1);
+  }
+  let args = {};
+  if (jsonArgs) {
+    try {
+      args = JSON.parse(jsonArgs);
+    } catch {
+      console.error('Arguments must be valid JSON, e.g. \'{"ip":"8.8.8.8"}\'');
+      process.exit(1);
+    }
+  }
+  try {
+    printResult(await callTool(name, args));
+  } catch (e) {
+    console.error("❌ " + e.message);
+    process.exit(1);
+  }
+}
+
+async function interactive() {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q) => new Promise((r) => rl.question(q, r));
+
+  console.log("\n🔧 netmcp CLI");
+  console.log(`API: ${API}\n`);
+
+  const categories = Object.keys(TOOLS);
+  categories.forEach((cat, i) => {
+    console.log(`${i + 1}. ${cat}`);
+    Object.entries(TOOLS[cat]).forEach(([n, { desc }]) => console.log(`     • ${n} — ${desc}`));
   });
 
-  const question = (prompt) =>
-    new Promise((resolve) => rl.question(prompt, resolve));
-
-  console.log("\n🔧 netmcp CLI Tool");
-  console.log("==================\n");
-
-  // List tools
-  console.log("Available Tool Categories:");
-  Object.entries(TOOLS).forEach(([cat, tools], idx) => {
-    console.log(`\n${idx + 1}. ${cat.toUpperCase()}`);
-    Object.entries(tools).forEach(([name, { desc }]) => {
-      console.log(`   • ${name}: ${desc}`);
-    });
-  });
-
-  const categoryNames = Object.keys(TOOLS);
-  let categoryChoice = await question(
-    `\nSelect category (1-${categoryNames.length}): `
-  );
-  const category = categoryNames[parseInt(categoryChoice) - 1];
-
+  const catIdx = parseInt(await ask(`\nSelect category (1-${categories.length}): `), 10) - 1;
+  const category = categories[catIdx];
   if (!category) {
     console.log("Invalid category");
-    rl.close();
-    return;
+    return rl.close();
   }
 
   const tools = TOOLS[category];
-  const toolNames = Object.keys(tools);
-  console.log(`\n${category.toUpperCase()} Tools:`);
-  toolNames.forEach((name, idx) => {
-    console.log(`${idx + 1}. ${name}`);
-  });
-
-  let toolChoice = await question(`Select tool (1-${toolNames.length}): `);
-  const toolName = toolNames[parseInt(toolChoice) - 1];
-  const toolConfig = tools[toolName];
-
-  if (!toolConfig) {
+  const names = Object.keys(tools);
+  names.forEach((n, i) => console.log(`${i + 1}. ${n}`));
+  const toolIdx = parseInt(await ask(`Select tool (1-${names.length}): `), 10) - 1;
+  const name = names[toolIdx];
+  if (!name) {
     console.log("Invalid tool");
-    rl.close();
-    return;
+    return rl.close();
   }
 
-  console.log(`\nTool: ${toolName}`);
-  console.log(`Description: ${toolConfig.desc}`);
-
-  const params = {};
-  for (const param of toolConfig.params) {
-    const value = await question(`Enter ${param}: `);
-    params[param] = value;
+  const args = {};
+  for (const p of tools[name].params) {
+    const key = p.replace(/\*$/, "");
+    const required = p.endsWith("*");
+    const val = await ask(`Enter ${key}${required ? " (required)" : ""}: `);
+    if (val !== "") {
+      // Try JSON (for object/array/number/bool params); fall back to string.
+      try {
+        args[key] = JSON.parse(val);
+      } catch {
+        args[key] = val;
+      }
+    }
   }
 
-  console.log("\n⏳ Executing...\n");
-
+  console.log("\n⏳ Calling " + name + " ...");
   try {
-    const response = await callTool(toolName, params);
-    console.log("✅ Result:\n");
-    console.log(JSON.stringify(response, null, 2));
-  } catch (error) {
-    console.error("❌ Error:", error.message);
+    printResult(await callTool(name, args));
+  } catch (e) {
+    console.error("❌ " + e.message);
   }
-
   rl.close();
 }
 
-async function callTool(toolName, params) {
-  const payload = {
-    jsonrpc: "2.0",
-    id: "1",
-    method: "tools/call",
-    params: {
-      name: toolName,
-      arguments: params,
-    },
-  };
-
-  try {
-    const response = await fetch(NETMCP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-    if (data.error) throw new Error(data.error.message);
-    return data.result;
-  } catch (error) {
-    // Try fallback URL
-    const fallbackResponse = await fetch(FALLBACK_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!fallbackResponse.ok) {
-      throw new Error(`Failed: ${error.message}`);
-    }
-
-    const data = await fallbackResponse.json();
-    if (data.error) throw new Error(data.error.message);
-    return data.result;
-  }
+const [, , toolArg, argsArg] = process.argv;
+if (toolArg) {
+  oneShot(toolArg, argsArg);
+} else {
+  interactive().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
 }
-
-main().catch(console.error);

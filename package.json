@@ -30,9 +30,6 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "dependencies": {
-    "node-fetch": "^3.3.2"
-  },
   "devDependencies": {
     "wrangler": "^3.80.0"
   },
@@ -41,10 +38,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/whobcode/netmcp.git"
+    "url": "https://github.com/whobcode/sweets.git"
   },
   "bugs": {
-    "url": "https://github.com/whobcode/netmcp/issues"
+    "url": "https://github.com/whobcode/sweets/issues"
   },
-  "homepage": "https://github.com/whobcode/netmcp"
+  "homepage": "https://github.com/whobcode/sweets"
 }
