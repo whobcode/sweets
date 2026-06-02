@@ -23,19 +23,6 @@ id = "adb42c556a104d49b5d6861dc823732d"
 pattern = "netapi.hwmnbn.me"
 custom_domain = true
 
-# Environment-specific configuration
-[env.production]
-route = "https://netmcp-api.yourdomain.com/*"
-zone_id = "your-zone-id"
-account_id = "your-account-id"
-vars = { NETMCP_URL = "https://netmcp.hwmnbn.me/mcp" }
-
-[env.staging]
-route = "https://netmcp-staging.yourdomain.com/*"
-zone_id = "your-zone-id"
-account_id = "your-account-id"
-vars = { NETMCP_URL = "https://netmcp.hwmnbn.me/mcp" }
-
 # Optional: Add secrets (for authentication)
 # Run: wrangler secret put NETMCP_TOKEN --env production
 # Then uncomment below:
