@@ -47,7 +47,8 @@ custom_domain = true
 # database_id = "your-db-id"
 
 # Limits
-limits = { cpu_milliseconds = 50000 }
+[limits]
+cpu_ms = 50000
 
 # Build configuration
 [build]
