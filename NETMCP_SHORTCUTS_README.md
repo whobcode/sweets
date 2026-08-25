@@ -1,432 +1,161 @@
-# 🔧 netmcp Shortcuts - Complete Toolkit
+# 🔧 netmcp Shortcuts
 
-Comprehensive shortcuts and integrations for your netmcp MCP server across all platforms.
+A toolkit for calling the **netmcp** MCP server from anywhere — CLI, browser, and HTTP — via a Cloudflare Worker that handles authentication and the MCP protocol for you.
 
-**netmcp Endpoints:**
-- Primary: `https://netmcp.hwmnbn.me/mcp`
-- Fallback: `https://tru-bone.workers.dev/mcp`
-
----
-
-## 📋 Quick Start
-
-### Option 1: CLI Tool (Recommended for Development)
-
-```bash
-# Make executable
-chmod +x netmcp-cli.js
-
-# Run with Node
-node netmcp-cli.js
-
-# Or with npx
-npx node netmcp-cli.js
-```
-
-**Features:**
-- Interactive menu for selecting tools
-- Guided parameter input
-- Auto-fallback to backup URL
-- JSON response formatting
+**Public API (the Worker):** `https://netapi.hwmnbn.me`
+**Upstream MCP server:** `https://netmcp.hwmnbn.me/mcp` (GitHub-OAuth protected; not called directly by clients)
 
 ---
 
-### Option 2: Cloudflare Worker Wrapper
+## Why a Worker in front?
 
-Deploy your own HTTP API wrapper for netmcp.
+netmcp is a **streamable-HTTP MCP server behind GitHub OAuth**. Calling it directly requires:
 
-**Setup:**
+- a GitHub-OAuth access token (short-lived, with a *rotating* refresh token),
+- an MCP `initialize` handshake to obtain an `Mcp-Session-Id`,
+- the `Accept: application/json, text/event-stream` header, and
+- Server-Sent-Events response parsing.
 
-```bash
-# In your Wrangler project
-cp netmcp-worker.js src/index.js
+A thin CLI or a browser bookmarklet can't reasonably do all that. So the **Worker** (`src/`) does it once, and exposes every tool as a plain HTTP endpoint:
 
-# Or create new project
-wrangler generate netmcp-api
-cd netmcp-api
-cp ../netmcp-worker.js src/index.js
-
-# Deploy
-wrangler deploy
+```
+GET  /tool/:name?param=value      # query params, coerced to the tool's types
+POST /tool/:name   {json body}    # JSON arguments
 ```
 
-**Usage:**
+```
+client (CLI / bookmarklet / curl) ──HTTP──▶ Worker (netapi.hwmnbn.me)
+                                              │  KV-backed OAuth token refresh
+                                              │  MCP initialize → session → SSE
+                                              ▼
+                                          netmcp.hwmnbn.me/mcp
+```
+
+---
+
+## Endpoints
+
+| Endpoint | Description |
+|---|---|
+| `GET /` | Landing page |
+| `GET /health` | Health check |
+| `GET /tools` | Human-readable tool list (HTML, grouped by category) |
+| `GET /tools.json` | Machine-readable tool list, live from the server |
+| `GET /auth/status` | Confirms the token layer can mint an access token (never returns the token) |
+| `GET\|POST /tool/:name` | Call a tool |
+
+### Examples
 
 ```bash
-# Get list of tools
-curl https://your-worker.workers.dev/tools
+# IP enrichment (GET)
+curl "https://netapi.hwmnbn.me/tool/ipwhois_enrichment?ip=8.8.8.8"
 
-# Take screenshot
-curl -X POST https://your-worker.workers.dev/tool/screenshot \
+# GitHub exploit search (GET, params coerced)
+curl "https://netapi.hwmnbn.me/tool/github_exploit_search?query=log4j&limit=5"
+
+# Screenshot (POST)
+curl -X POST https://netapi.hwmnbn.me/tool/browser_screenshot \
   -H "Content-Type: application/json" \
-  -d '{"url":"https://example.com"}'
-
-# IP lookup
-curl https://your-worker.workers.dev/tool/ipwhois_lookup?ip=8.8.8.8
-
-# GitHub search
-curl https://your-worker.workers.dev/tool/github_search?query=exploit
+  -d '{"url":"https://example.com","fullPage":true}'
 ```
-
-**Features:**
-- REST API endpoints for each tool
-- GET and POST support
-- CORS enabled
-- Health check endpoint
-- HTML dashboard at `/tools`
 
 ---
 
-### Option 3: Browser Bookmarklet
+## Clients
 
-Quick access from your browser toolbar.
-
-**Installation:**
-
-1. **Create a new bookmark** (Ctrl+D or Cmd+D)
-2. **Title:** `🔧 netmcp`
-3. **URL:** Paste the entire content from `netmcp-bookmarklet.js` (starting with `javascript:`)
-4. Save to toolbar
-
-**Usage:**
-
-- Click the bookmark from any page
-- Select a tool category
-- Choose a tool
-- Fill in parameters
-- View results in modal
-
-**Features:**
-- Dark theme UI
-- Auto-fills current URL for browser tools
-- Shows results in modal
-- ESC to close
-- Zero dependencies
-
----
-
-### Option 4: iOS Shortcuts
-
-Automatable workflows on iPhone/iPad.
-
-**Manual Setup:**
-
-Follow the instructions in `netmcp-ios-shortcuts.md`:
-
-1. Open **Shortcuts** app
-2. Create a new shortcut for each tool
-3. Add actions following the templates
-4. Configure Siri voice triggers
-5. Add to home screen widgets
-
-**Creating a Master Launcher:**
-
-1. Create shortcut called "netmcp Tools"
-2. Add "Choose from List" action with all tool names
-3. Use "Switch" action to run appropriate shortcut
-4. Add Siri voice command
-
-**Automation Examples:**
-
-```
-Trigger: Time of Day (Daily 9 AM)
-→ Run "netmcp: GitHub Exploits" with saved search
-
-Trigger: Share Sheet
-→ Pass URL to "netmcp: Screenshot"
-
-Trigger: Siri ("Hey Siri, netmcp lookup")
-→ Ask for IP, run lookup, show result
-```
-
-**Share Sheet Integration:**
-
-1. Edit shortcut → Info icon
-2. Enable "Show in Share Sheet"
-3. Select input type (URL, Text, etc.)
-4. Now accessible from Share menu anywhere
-
----
-
-## 🛠️ Integration Patterns
-
-### CLI + Wrangler Script
+### CLI
 
 ```bash
-#!/bin/bash
-# netmcp wrapper in your project
-
-case $1 in
-  screenshot)
-    node netmcp-cli.js <<< $'1\n1\n1\n'$2
-    ;;
-  ipinfo)
-    node netmcp-cli.js <<< $'1\n4\n2\n'$2
-    ;;
-  *)
-    node netmcp-cli.js
-    ;;
-esac
+node netmcp-cli.js                          # interactive menu
+node netmcp-cli.js ipwhois_enrichment '{"ip":"8.8.8.8"}'   # one-shot
+NETMCP_API=https://netapi.hwmnbn.me node netmcp-cli.js     # override target
 ```
 
-### Worker + Frontend
+### Browser bookmarklet
 
-Create a simple HTML dashboard:
+Create a bookmark whose URL is the entire `javascript:` line in `netmcp-bookmarklet.js`. Click it on any page → pick a tool → results render in a modal. It calls the Worker, so no keys live in the browser.
 
-```html
-<!DOCTYPE html>
-<html>
-<body>
-  <h1>netmcp Dashboard</h1>
-  <button onclick="takeSS()">Screenshot</button>
-  <button onclick="lookupIP()">IP Lookup</button>
-  
-  <script>
-    const API = "https://your-worker.workers.dev";
-    
-    async function takeSS() {
-      const url = prompt("URL:");
-      const res = await fetch(`${API}/tool/screenshot`, {
-        method: "POST",
-        body: JSON.stringify({url})
-      });
-      console.log(await res.json());
-    }
-    
-    async function lookupIP() {
-      const ip = prompt("IP:");
-      const res = await fetch(`${API}/tool/ipwhois_lookup?ip=${ip}`);
-      console.log(await res.json());
-    }
-  </script>
-</body>
-</html>
-```
+### iOS Shortcuts
 
-### Siri Shortcuts + CLI
-
-Call CLI tool from iOS Shortcut:
-
-```
-Shortcut: "netmcp via SSH"
-1. Ask for tool name
-2. Ask for parameters
-3. Run script over SSH: node netmcp-cli.js
-4. Display result
-```
+See `netmcp-ios-shortcuts.md`. Point the network-request actions at `https://netapi.hwmnbn.me/tool/<name>`.
 
 ---
 
-## 🗂️ Tool Categories & Endpoints
+## Tools
 
-### Browser Tools
-- `screenshot` - Take webpage screenshot
-- `get_content` - Extract text from page
-- `get_markdown` - Fetch as markdown
-- `click` - Click element on page
-- `fill_form` - Submit form data
+24 tools. Several call third-party APIs and need a key configured **on the upstream netmcp Worker** (not on this proxy). Status as last verified:
 
-### OSINT
-- `shodan_search` - Search Shodan devices
-- `censys_search` - Query Censys hosts
-- `ipwhois_lookup` - IP geolocation
-- `securitytrails_dns` - Historical DNS
+### ✅ Work with no extra key
+| Tool | Purpose |
+|---|---|
+| `nvd_cve_lookup` | NIST NVD CVE lookup (`NVD_API_KEY` optional, raises rate limit) |
+| `exploitdb_search` / `exploitdb_get` / `exploitdb_info` | ExploitDB |
+| `wayback_machine_lookup` | Wayback Machine snapshots |
+| `ipwhois_enrichment` | IP geolocation / WHOIS |
+| `userInfoOctokit` | Authenticated GitHub user info |
+| `generateImage` | AI image generation |
+| `add` | Trivial test tool |
+| `browser_*` | `screenshot`, `get_content`, `get_markdown`, `pdf`, `scrape`, `execute_script`, `get_links`, `fill_form`, `click` |
 
-### GitHub & Repos
-- `github_search` - Find repositories
-- `github_exploit_search` - Search exploits
+### 🔑 Require an upstream API key
+| Tool | Secret(s) | Status | Get a key |
+|---|---|---|---|
+| `github_exploit_search` | `GITHUB_TOKEN` | ✅ working | https://github.com/settings/tokens/new (`public_repo`) |
+| `shodan_device_search` | `SHODAN_API_KEY` | ⚠️ key set, provider returns 403 (account likely lacks API/search entitlement) | https://account.shodan.io |
+| `censys_host_search` | `CENSYS_API_ID`, `CENSYS_API_SECRET` | ⚠️ keys set, provider returns 401 (verify Search-API ID/secret, not a Platform token) | https://search.censys.io/account/api |
+| `gitlab_code_search` | `GITLAB_TOKEN` (optional) | ➖ not set; public-only without it (401) | https://gitlab.com/-/user_settings/personal_access_tokens (`read_api`) |
+| `securitytrails_dns_history` | `SECURITYTRAILS_API_KEY` | ⛔ unavailable — API is paid-only (~$500/mo) | https://securitytrails.com |
 
-### Security & CVE
-- `nvd_lookup` - National Vulnerability Database
-- `exploitdb_search` - Search ExploitDB
-- `osv_scan` - Scan packages for vulns
+### Configuring upstream keys
 
-### AI
-- `generate_image` - AI image generation
-
----
-
-## 📞 API Format
-
-All requests follow JSON-RPC 2.0:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "1",
-  "method": "tools/call",
-  "params": {
-    "name": "tool_name",
-    "arguments": {
-      "param1": "value1",
-      "param2": "value2"
-    }
-  }
-}
-```
-
-Response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "1",
-  "result": {
-    // Tool-specific output
-  }
-}
-```
-
-Error response:
-
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "1",
-  "error": {
-    "code": -1,
-    "message": "Error description"
-  }
-}
-```
-
----
-
-## 🔐 Security Notes
-
-- **No API keys stored** in CLI/bookmarklet
-- **CORS enabled** for cross-origin requests
-- **Fallback URL** available (`tru-bone.workers.dev`)
-- **Public netmcp** - Rate limiting recommended in production
-- **iOS:** Passwords never logged; stored in Keychain
-
----
-
-## 🚀 Advanced Usage
-
-### CLI with Environment Variables
+Tool credentials are secrets on the **netmcp** Worker (the `whobcode/netmcp` repo), set via:
 
 ```bash
-export NETMCP_URL="https://custom-url.com"
-node netmcp-cli.js
+cd <netmcp repo>
+npx wrangler secret put GITHUB_TOKEN
+npx wrangler secret put SHODAN_API_KEY
+npx wrangler secret put CENSYS_API_ID
+npx wrangler secret put CENSYS_API_SECRET
+# optional:
+npx wrangler secret put GITLAB_TOKEN
+npx wrangler secret put NVD_API_KEY
 ```
 
-### Worker with Authentication
-
-Add to Cloudflare Worker:
-
-```javascript
-const AUTH_TOKEN = env.NETMCP_TOKEN;
-
-if (request.headers.get("Authorization") !== `Bearer ${AUTH_TOKEN}`) {
-  return new Response("Unauthorized", { status: 401 });
-}
-```
-
-### iOS Shortcut with Scheduling
-
-```
-Automation: Time of Day
-→ Run shortcut every hour
-→ Search GitHub for new exploits
-→ Send notification if found
-```
-
-### Bookmarklet with Custom Domain
-
-Edit the NETMCP_URL in bookmarklet for custom deployment:
-
-```javascript
-const NETMCP_URL = 'https://your-custom-domain.com/mcp';
-```
+Secrets apply live — no redeploy needed. Confirm which names are set with `npx wrangler secret list` (shows names only).
 
 ---
 
-## 🐛 Troubleshooting
+## Deploying this Worker
 
-**CLI hangs on input:**
-- Use piped input: `echo -e "1\n1\n1\n" | node netmcp-cli.js`
-- Or redirect from file: `node netmcp-cli.js < inputs.txt`
-
-**Worker CORS errors:**
-- Ensure corsHeaders are in all responses
-- Test with curl: `curl -i https://your-worker.workers.dev/health`
-
-**Bookmarklet doesn't show:**
-- Check browser console for errors (F12)
-- Verify NETMCP_URL is accessible
-- Test with fallback URL
-
-**iOS Shortcut timeout:**
-- Increase timeout in network request action
-- Check device network connection
-- Verify netmcp endpoint is reachable
-
----
-
-## 📝 Examples
-
-### Screenshot webpage with CLI
 ```bash
-node netmcp-cli.js
-# Select: 1 (Browser)
-# Select: 1 (screenshot)
-# Enter URL: https://example.com
+npm install
+npx wrangler deploy        # deploys to netapi.hwmnbn.me (custom domain) + workers.dev
+npm test                   # smoke-tests the live Worker
 ```
 
-### Quick IP lookup via Worker
-```bash
-curl "https://your-worker.workers.dev/tool/ipwhois_lookup?ip=1.1.1.1"
-```
+### Auth layer (this Worker's own secret/state)
 
-### Exploit search via bookmarklet
-- Click 🔧 netmcp bookmark
-- Select "GitHub Exploits"
-- Enter search term
-- View results in modal
-
-### Automated daily CVE scan via iOS
-- Create Shortcut "Daily CVE Check"
-- Set automation: Time of Day → 9 AM
-- Ask for CVE ID (or search recent)
-- Send notification with severity
-- Add to home screen widget
+The Worker authenticates to netmcp using GitHub-OAuth tokens stored in the
+`NETMCP_AUTH` KV namespace (key `auth`). It caches the access token until just
+before expiry, then refreshes — persisting the rotated refresh token back to KV.
+The refresh token lives **only in KV, never in git**. `/auth/status` reports
+whether minting works without exposing the token.
 
 ---
 
-## 📦 File Overview
+## Files
 
-- **netmcp-cli.js** - Interactive terminal tool
-- **netmcp-worker.js** - Cloudflare Worker wrapper
-- **netmcp-bookmarklet.js** - Browser bookmarklet code
-- **netmcp-ios-shortcuts.md** - iOS Shortcuts setup guide
-- **README.md** - This file
-
----
-
-## 🔄 Workflow Recommendations
-
-**Development:** CLI tool
-```bash
-node netmcp-cli.js
-```
-
-**API Server:** Cloudflare Worker
-```bash
-wrangler deploy
-# Use REST endpoints
-```
-
-**Quick Access:** Browser bookmarklet
-```
-Click 🔧 → Select tool → Run
-```
-
-**Mobile/Automated:** iOS Shortcuts
-```
-Siri + Automations + Widgets
-```
+| File | Role |
+|---|---|
+| `src/index.js` | Worker entry: routing, tool schema, query coercion, HTML/JSON listings |
+| `src/mcp.js` | MCP client: initialize/session handshake + SSE parsing |
+| `src/auth.js` | KV-backed OAuth access-token refresh |
+| `netmcp-cli.js` | Terminal client (interactive + one-shot) |
+| `netmcp-bookmarklet.js` | Browser bookmarklet client |
+| `netmcp-ios-shortcuts.md` | iOS Shortcuts setup guide |
+| `test-netmcp.js` | Live Worker smoke test |
+| `wrangler.toml` | Worker config (KV binding, custom domain, vars) |
 
 ---
 
-**Need help?** Check the specific file documentation or review the netmcp repo at `github.com/whobcode/netmcp`
+**License:** MIT

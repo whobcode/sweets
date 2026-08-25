@@ -1,240 +1,98 @@
-/*
- * netmcp iOS Shortcut
- * 
- * Installation Instructions:
- * 1. Download the Shortcuts app (iOS 13+)
- * 2. Copy the shortcut JSON below and import it, OR
- * 3. Create these shortcuts manually following the steps below
- * 
- * Quick Setup:
- * - Open Shortcuts app
- * - Tap + to create new shortcut
- * - Add actions following the templates below
- * - Name each shortcut accordingly
- */
+# netmcp iOS Shortcuts
 
-// ===== SHORTCUT 1: Screenshot Current Page =====
-// Name: "netmcp: Screenshot"
-// Trigger: Siri, Widget, Share Sheet
-/*
-Steps:
-1. Ask for URL (with default: current webpage)
-2. Make a POST request to: https://netmcp.hwmnbn.me/mcp
-   Body (JSON):
-   {
-     "jsonrpc": "2.0",
-     "id": "1",
-     "method": "tools/call",
-     "params": {
-       "name": "screenshot",
-       "arguments": {"url": "[url_from_step_1]"}
-     }
-   }
-3. Display result in Alert
-*/
+Drive netmcp tools from iPhone/iPad via the Worker at **`https://netapi.hwmnbn.me`**.
 
-// ===== SHORTCUT 2: OSINT IP Lookup =====
-// Name: "netmcp: IP Lookup"
-/*
-Steps:
-1. Ask for IP address
-2. POST to https://netmcp.hwmnbn.me/mcp
-   Body:
-   {
-     "jsonrpc": "2.0",
-     "id": "1",
-     "method": "tools/call",
-     "params": {
-       "name": "ipwhois_lookup",
-       "arguments": {"ip": "[ip_address]"}
-     }
-   }
-3. Display formatted result
-*/
+> **Why the Worker?** The raw netmcp endpoint (`netmcp.hwmnbn.me/mcp`) is behind
+> GitHub OAuth and speaks the streamable-HTTP MCP protocol (session handshake +
+> SSE), which Shortcuts can't do. The Worker handles all of that and exposes
+> each tool as a simple HTTP call: `POST https://netapi.hwmnbn.me/tool/<name>`
+> with a plain JSON body of the tool's arguments. No tokens live on the device.
 
-// ===== SHORTCUT 3: Shodan Search =====
-// Name: "netmcp: Shodan Search"
-/*
-Steps:
-1. Ask for search query
-2. POST to https://netmcp.hwmnbn.me/mcp
-   Body:
-   {
-     "jsonrpc": "2.0",
-     "id": "1",
-     "method": "tools/call",
-     "params": {
-       "name": "shodan_search",
-       "arguments": {"query": "[search_query]"}
-     }
-   }
-3. Parse JSON response
-4. Create rich list of results
-5. Copy to clipboard & show
-*/
+---
 
-// ===== SHORTCUT 4: GitHub Exploit Search =====
-// Name: "netmcp: GitHub Exploits"
-/*
-Steps:
-1. Ask for search term
-2. POST to https://netmcp.hwmnbn.ee/mcp
-   Body:
-   {
-     "jsonrpc": "2.0",
-     "id": "1",
-     "method": "tools/call",
-     "params": {
-       "name": "github_exploit_search",
-       "arguments": {"query": "[search_term]"}
-     }
-   }
-3. Parse & display results
-4. Option to open in GitHub
-*/
+## The one pattern every shortcut uses
 
-// ===== SHORTCUT 5: CVE Lookup =====
-// Name: "netmcp: CVE Lookup"
-/*
-Steps:
-1. Ask for CVE ID (e.g., CVE-2024-1234)
-2. POST to https://netmcp.hwmnbn.me/mcp
-   Body:
-   {
-     "jsonrpc": "2.0",
-     "id": "1",
-     "method": "tools/call",
-     "params": {
-       "name": "nvd_lookup",
-       "arguments": {"cve": "[cve_id]"}
-     }
-   }
-3. Show formatted vulnerability details
-*/
+1. **Ask for Input** (or **Get Contents of Share Sheet**) → store as a variable.
+2. **Get Contents of URL**:
+   - URL: `https://netapi.hwmnbn.me/tool/<tool_name>`
+   - Method: **POST**
+   - Headers: `Content-Type` = `application/json`
+   - Request Body: **JSON** → add the tool's arguments (see each tool below).
+3. **Get Dictionary Value** → key path `result.content` (an array of
+   `{type, text}` items). For text tools, get `text` from the first item.
+4. **Show Result** / **Quick Look** / **Set Clipboard** / **Save to Photos**.
 
-// ===== SHORTCUT 6: Generate Image =====
-// Name: "netmcp: Generate Image"
-/*
-Steps:
-1. Ask for image prompt
-2. POST to https://netmcp.hwmnbn.me/mcp
-   Body:
-   {
-     "jsonrpc": "2.0",
-     "id": "1",
-     "method": "tools/call",
-     "params": {
-       "name": "generate_image",
-       "arguments": {"prompt": "[prompt_text]"}
-     }
-   }
-3. Wait for response
-4. Display generated image
-5. Save to Photos if desired
-*/
+The response shape is always:
 
-// ===== MASTER SHORTCUT: netmcp Launcher =====
-// Name: "netmcp Tools"
-// This creates a menu to run other shortcuts
-/*
-Steps:
-1. Create menu:
-   Choose from list:
-   - 📸 Screenshot
-   - 🔍 IP Lookup
-   - 🎯 Shodan Search
-   - 💻 GitHub Exploits
-   - 🔴 CVE Lookup
-   - 🎨 Generate Image
-   - ⚙️ Custom Tool
+```json
+{ "tool": "<name>", "result": { "content": [ { "type": "text", "text": "..." } ] } }
+```
 
-2. Based on choice, run corresponding shortcut
-   (Or use Ask Each Time to prompt for parameters)
+Image tools (`generateImage`) return `result.content[0].data` as base64 — use
+**Base64 Encode → Decode** then **Save to Photos**.
 
-3. If Custom Tool selected:
-   - Ask for tool name
-   - Ask for parameter (JSON format)
-   - Execute with POST request
-*/
+---
 
-// ===== AUTOMATION IDEAS =====
-// Automations you can create:
-// 1. NFC Tag → Trigger IP lookup
-// 2. Home Screen Widget → Quick screenshot tool
-// 3. Time of Day → Scheduled security scans
-// 4. When I Open App → Run custom OSINT search
-// 5. Bluetooth Connection → Auto-screenshot connected device info
-// 6. Notification → Trigger CVE checks on security alerts
-// 7. Siri Voice Command → "Hey Siri, netmcp [tool name]"
+## Ready-to-build shortcuts
 
-// ===== SIRI CONFIGURATION =====
-// Add voice triggers to shortcuts for hands-free operation
-// Examples:
-// - "netmcp screenshot" → Takes screenshot
-// - "netmcp lookup [IP]" → IP geolocation
-// - "netmcp search [query]" → GitHub search
-// - "netmcp exploit [term]" → Exploit search
-// - "netmcp scan [package]" → Vulnerability scan
+### 📸 netmcp: Screenshot
+- URL: `https://netapi.hwmnbn.me/tool/browser_screenshot`
+- Body: `{ "url": "<URL or Share Sheet input>", "fullPage": true }`
+- The result `content` includes image data — Quick Look it.
 
-// ===== SHARE SHEET INTEGRATION =====
-// Configure Share Sheet to trigger shortcuts
-// 1. Open Shortcuts app
-// 2. Edit shortcut → i icon → Share Sheet
-// 3. Enable "Show in Share Sheet"
-// 4. Select "Websites" or "Text" as input type
-// 5. Now you can share URLs directly to netmcp tools
+### 🔍 netmcp: IP Lookup
+- URL: `https://netapi.hwmnbn.me/tool/ipwhois_enrichment`
+- Body: `{ "ip": "<Ask for input>" }`
+- Show `result.content[0].text`.
 
-// ===== ALTERNATIVE: Import from iCloud Link =====
-// If you create these in the Shortcuts app, you can share via iCloud:
-// 1. Edit shortcut
-// 2. Share icon → Copy iCloud Link
-// 3. Share link with others to import
+### 💻 netmcp: GitHub Exploits
+- URL: `https://netapi.hwmnbn.me/tool/github_exploit_search`
+- Body: `{ "query": "<Ask for input>", "limit": 5 }`
 
-// ===== EXAMPLE: Full JSON Payload Template =====
-// Use this structure for all POST requests:
-const requestTemplate = {
-  jsonrpc: "2.0",
-  id: "1",
-  method: "tools/call",
-  params: {
-    name: "tool_name_here",
-    arguments: {
-      // Tool-specific parameters go here
-      param1: "value1",
-      param2: "value2"
-    }
-  }
-};
+### 🔴 netmcp: CVE Lookup
+- URL: `https://netapi.hwmnbn.me/tool/nvd_cve_lookup`
+- Body: `{ "cveId": "<Ask for input, e.g. CVE-2021-44228>" }`
 
-// ===== RESPONSE PARSING =====
-// All responses follow this format:
-const responseTemplate = {
-  jsonrpc: "2.0",
-  id: "1",
-  result: {
-    // Tool-specific result data
-  }
-  // OR on error:
-  // "error": { "code": -1, "message": "Error description" }
-};
+### 🌐 netmcp: Page to Markdown
+- URL: `https://netapi.hwmnbn.me/tool/browser_get_markdown`
+- Body: `{ "url": "<Share Sheet input>" }`
 
-// ===== SHORTCUT BEST PRACTICES =====
-// 1. Always ask for required parameters
-// 2. Validate inputs before sending
-// 3. Add timeout (30 seconds) to requests
-// 4. Show loading indicator while waiting
-// 5. Parse errors gracefully
-// 6. Store frequently-used queries
-// 7. Use dictionaries to build request payloads
-// 8. Add success/failure notifications
-// 9. Support deep linking with URL schemes
-// 10. Test with fallback URL (tru-bone.workers.dev)
+### 🎨 netmcp: Generate Image
+- URL: `https://netapi.hwmnbn.me/tool/generateImage`
+- Body: `{ "prompt": "<Ask for input>", "steps": 8 }`
+- Read `result.content[0].data` (base64) → decode → Save to Photos.
 
-// ===== DEBUGGING =====
-// To test shortcuts:
-// 1. Open Shortcuts app
-// 2. Tap Details icon while editing
-// 3. Enable "Show When Run"
-// 4. Run shortcut and check each step
-// 5. Use Ask for [Text] to see intermediate values
-// 6. Check response with "Show Result" action
+> **Tip:** the full, live tool list is at `https://netapi.hwmnbn.me/tools.json`.
+> Any tool name there works as `/tool/<name>`.
+
+---
+
+## Master launcher
+
+Create one shortcut **"netmcp Tools"**:
+
+1. **Choose from Menu**: Screenshot · IP Lookup · GitHub Exploits · CVE Lookup · Markdown · Generate Image · Custom.
+2. Each menu item runs the matching shortcut (or inlines the steps above).
+3. **Custom**: Ask for tool name, Ask for JSON arguments, POST to
+   `https://netapi.hwmnbn.me/tool/[tool name]` with that body.
+
+---
+
+## Triggers & integration
+
+- **Share Sheet:** shortcut → ⓘ → enable *Show in Share Sheet*, accept *URLs*. Share any page straight into Screenshot / Markdown.
+- **Siri:** add a phrase like "netmcp lookup" to run a shortcut hands-free.
+- **Automations:** Time of Day (daily exploit search), NFC tag (IP lookup), Focus change, etc.
+- **Home Screen:** add a shortcut to the home screen or a widget for one-tap access.
+
+---
+
+## Best practices
+
+1. Set the **Get Contents of URL** timeout generously — browser/image tools can take 10–30s.
+2. Check for an `error` key in the response and surface it (the Worker returns
+   `{ "error": "..." }` with a 4xx/5xx status on failure).
+3. A tool can also return `result.isError: true` with an explanatory `text`
+   (e.g. an upstream API key isn't configured) — show that text rather than
+   treating it as success.
+4. Store frequent queries as shortcut variables to avoid re-typing.
